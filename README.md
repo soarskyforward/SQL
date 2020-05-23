@@ -5,14 +5,64 @@
 
 
 #### MySql 命令行实用程序
-`mysql -u username -p`  
+`mysql -u username -p`
 `mysql --help`
+
+#### 创建和操纵表
+```
+CREATE TABLE customers (
+  cust_id int(11) NOT NULL AUTO_INCREMENT,
+  cust_name char(50) NOT NULL,
+  cust_address char(50) DEFAULT NULL,
+  cust_city char(50) DEFAULT NULL,
+  cust_state char(5) DEFAULT NULL,
+  cust_zip char(10) DEFAULT NULL,
+  cust_country char(50) DEFAULT NULL,
+  cust_contact char(50) DEFAULT NULL,
+  cust_email char(255) DEFAULT NULL,
+  PRIMARY KEY (cust_id)
+) ENGINE=InnoDB AUTO_INCREMENT=10007 DEFAULT CHARSET=utf8
+```
+
+#### 插入数据
+
+```
+INSERT INTO customers(cust_name,
+						cust_address,
+						cust_city,
+						cust_state,
+						cust_zip,
+						cust_country,
+											cust_contact,
+											cust_email)
+			VALUES('Pep E.lapew',
+				'100 main street',
+				'Los Angeles',
+				'CA',
+				'90046',
+				'USA',
+				NULL,
+				NULL);
+```
+
+#### 更新和删除数据
+```
+#不要省略WHERE子句
+UPDATE customers
+SET cust_name = 'The fudd'
+WHERE cust_id = 10005;
+
+DELETE FROM　customers
+WHERE cust_id = 10005;
+```
 
 #### 选择数据库  
 `SHOW DATABASES;`  
 `USE DBNAME;`  
 `SHOW TABLES;`  
 `SHOW COLUMNS FROM DATABASES;`  OR `DESCRIBE DATABASES;`  
+`SHOW CREATE DATABASES database_name`
+`SHOW CREATE TABLE table_name`
 
 #### 检索数据  
 `SELECT prod_name FROM products;`   #检索单列  
@@ -95,6 +145,8 @@ WHERE Date(order_date) = '2005-09-01';
 
 #### 汇总数据
 聚集函数（aggregate function）
+> 聚合函数会将NULL排除在外，但COUNT()例外
+
 - AVG()
 - COUNT()
 - MAX()
@@ -102,7 +154,7 @@ WHERE Date(order_date) = '2005-09-01';
 - SUM()
 
 #### 分组数据
->除聚集计算语句外， select语句中每个列都必须在GROUP　BY子句中给出
+>除聚集计算语句外， select语句中每个列都必须在GROUP　BY子句中给出，GROUP BY子句中指定的列称为聚合键或分组键
 ```
 SELECT vend_id, COUNT(*) AS num_prods
 FROM products
@@ -125,6 +177,9 @@ HAVING COUNT(*) >= 3;
 5.HAVING  组级过滤
 6.ORDER BY 输出排序顺序
 7.LIMIT 要检索的行数
+
+#### select子句执行顺序
+FROM -> WHERE -> GROUOP BY -> HAVING -> SELECT -> ORDER BY
 
 #### 使用子查询
 ```
@@ -197,4 +252,4 @@ UNION
 SELECT vend_id, prod_id, prod_price
 FROM products
 WHERE vend_id IN (1001,1002);
-```
+``
