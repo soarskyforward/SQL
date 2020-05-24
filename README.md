@@ -56,6 +56,20 @@ DELETE FROM　customers
 WHERE cust_id = 10005;
 ```
 
+#### 更新表
+```
+#给表添加一列
+ALTER TABLE vendors
+ADD vend_phone CHAR(20);
+#删除刚刚添加的列
+AlTER TABLE vendors
+DROP COLUMN vend_phone;
+
+#删除表
+DROP TABLE customers2;
+#重命名表
+RENAME TABLE customers2 TO customers;
+```
 #### 选择数据库  
 `SHOW DATABASES;`  
 `USE DBNAME;`  
@@ -252,4 +266,112 @@ UNION
 SELECT vend_id, prod_id, prod_price
 FROM products
 WHERE vend_id IN (1001,1002);
-``
+```
+
+#### 使用视图
+```
+#查看创建视图的语句
+SHOW CREATE VIEW viewname;
+#删除视图
+DROP VIEW viewname;
+
+#例子
+CREATE VIEW vendorlocations AS
+SELECT CONCAT(rtrim(vend_name),RTRIM(vend_country)) AS vend_title
+FROM vendors
+ORDER BY vend_name;
+#从视图查询
+SELECT *
+FROM vendorlocations;
+```
+
+#### 使用存储过程
+```
+#执行存储过程
+CALL productpricing(@pricelow, @pricehigh, @priceaverage)
+
+#创建存储过程
+CREATE PROCEDURE productpricing()
+BEGIN
+	SELECT AVG(prod_price) AS priceaverage
+	FROM products; #不要忘记;
+END;
+
+#使用参数
+CREATE PROCEDURE productpricing(OUT pl DECIMAL(8,2), OUT ph DECIMAL(8,2), OUT pa DECIMAL(8,2))
+BEGIN
+	SELECT MIN(prod_price)
+	INTO pl
+	FROM products;
+	SELECT MAX(prod_price)
+	INTO ph
+	FROM products;
+	SELECT AVG(prod_price)
+	INTO pa
+	FROM products;
+END;
+
+#检查存储过程
+SHOW CREATE PROCEDURE productpricing;
+
+#删除存储过程
+DROP PROCEDURE productpricing;
+```
+
+#### 使用游标
+```
+#创建游标
+CREATE PROCEDURE processorders()
+BEGIN
+  DECLARE ordernumbers CURSOR
+  FOR
+  SELECT order_num FROM orders;
+END;
+
+#打开和关闭游标
+OPEN ordernumbers;
+CLOSE ordernumbers;
+```
+
+#### 使用触发器
+```
+#INSERT触发器
+#引用一个NEW虚拟的表，访问被插入行，类比this指针
+CREATE TRIGGER neworder AFTER INSERT ON orders
+FOR EACH ROW SELECT NEW.order_num;
+
+#DELETE触发器
+#引用一个OLD虚拟的表，访问被删除行，只读，不能更改
+CREATE TRIGGER deleteorder BEFORE DELETE ON orders
+FOR EACH ROW
+BEGIN
+    INSERT INTO archive_orders(order_num, order_date, cust_id)
+    VALUES(OLD.order_num, OLD.order_date, OLD.cust_id);
+END;
+
+#UPDATE触发器
+#BEFORE: NEW，AFTER: OLD
+CREATE TRIGGER updatevendor BEFORE UPDATE ON vendors
+FOR EACH ROW SET NEW.vend_state = Upper(NEW.vend_state);
+```
+
+#### 管理事务处理
+```
+#使用ROLLBACK
+SELECT * FROM orderitems;
+START TRANSACTION;
+DELETE FROM orderitems;
+SELECT * FROM orderitems;
+ROLLBACK;
+SELECT * FROM orderitems;
+
+#使用COMMIT
+START TRANSACTION;
+DELETE FROM orderitems WHERE order_num = 20010;
+DELETE FROM orders WHERE order_num = 20010;
+COMMIT;
+
+#使用SAVEPOINT
+SAVEPOINT delete1;
+ROLLBACK TO delete1;
+```
