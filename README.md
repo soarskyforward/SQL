@@ -33,8 +33,8 @@ INSERT INTO customers(cust_name,
 						cust_state,
 						cust_zip,
 						cust_country,
-											cust_contact,
-											cust_email)
+						cust_contact,
+						cust_email)
 			VALUES('Pep E.lapew',
 				'100 main street',
 				'Los Angeles',
@@ -374,4 +374,27 @@ COMMIT;
 #使用SAVEPOINT
 SAVEPOINT delete1;
 ROLLBACK TO delete1;
+```
+
+#### 安全管理
+```
+#Mysql用户账号和信息存储在名为mysql的数据库中
+use mysql;
+SELECT user FROM user;
+
+#创建用户账号
+CREATE USER ben IDENTIFITED BY PASSWORD;
+#重命名
+RENAME USER ben TO bforta;
+
+#删除用户账号
+DROP USER bforta;
+
+#设置用户权限
+SHOW GRANTS FOR bforta;
+GRANT SELECT ON crashcourse.* TO bforta;
+REVOKE SELECT ON crashcourse.* FROM bforta；
+
+#更改口令
+SET PASSWORD FOR bforta = Password('new password');
 ```
