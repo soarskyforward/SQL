@@ -102,18 +102,39 @@ WHERE prod_price = 2.50;`
 组合WHERE子句 `AND` `OR` 优先处理`AND`  
 
 ```
+#CASE表达式
+SELECT prod_name,
+CASE when vend_id = 1001
+	THEN 001
+	WHEN vend_id = 1002
+	THEN 002
+	ELSE NULL
+END as id
+FROM products;
+```
+
+```
 # IN 操作符
 SELECT prod_name, prod_price
 FROM products  
 WHERE vend_id IN (1002,1003)   
 ORDER BY prod_name;  
 ```  
+
+```
+#EXISTS 谓语
+SELECT cust_name, cust_address
+from customers c
+WHERE EXISTS (SELECT *
+				FROM orders as o
+			  WHERE c.cust_id = o.cust_id);        
+```
 ```
 # NOT 操作符
 SELECT prod_name, prod_price
 FROM products  
 WHERE vend_id NOT IN (1002,1003)   
-ORDER BY prod_name;  
+ORDER BY prod_name;   
 ```
 >MySql支持NOT对IN，BETWEEN，EXISTS子句取反
 
@@ -267,7 +288,10 @@ SELECT vend_id, prod_id, prod_price
 FROM products
 WHERE vend_id IN (1001,1002);
 ```
-
+#### 窗口函数(OLAP函数)
+```
+升级至mysql8.0可支持
+```
 #### 使用视图
 ```
 #查看创建视图的语句
