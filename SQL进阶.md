@@ -117,3 +117,24 @@ SELECT CM.course_name,
 ```
 
 ### 自连接的用法
+>针对相同的表进行的连接被称为“自连接”
+
+#### 可重排序，排列，组合
+```
+/* 用于获取可重排列的SQL语句 */
+SELECT P1.name AS name_1, P2.name AS name_2
+  FROM Products P1, Products P2;
+
+/* 用于获取排列的SQL语句 */
+SELECT P1.name AS name_1, P2.name AS name_2
+  FROM Products P1, Products P2
+  WHERE P1.name <> P2.name;
+
+/* 用于获取组合的SQL语句 */
+SELECT P1.name AS name_1, P2.name AS name_2
+  FROM Products P1, Products P2
+  WHERE P1.name > P2.name;
+```
+>"< > <>"进行的连接称为非等值自连接。在获取列的组合时经常用到
+
+#### 删除重复行
