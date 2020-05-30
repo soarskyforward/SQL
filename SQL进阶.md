@@ -961,3 +961,12 @@ HAVING AVG(CASE WHEN sex = '男'
                 THEN score
                 ELSE NULL END);
 ```
+
+- COUNT(DISTINCT col) = COUNT(col)  列中没有重复的行
+- COUNT(* ) = COUNT(col)  列中没有NULL值
+- COUNT(* ) = MAX(col)  列是连续的编号（起始值是1）
+- COUNT(* ) = MAX(col) - MIN(col) + 1 列是连续的编号（起始值是任意整数）
+- MIN(col) = MAX(col) 列中只有一个值
+- MIN(col) * MAX(col) > 0 列中全为正数或全为负数
+- MIN(col) * MAX(col) < 0  列中最大值是正数，最小值是负数
+- MIN(ABS(col)) = 0   列中最少有一个0
