@@ -533,3 +533,199 @@ SELECT reserver, start_date, end_date
            AND ( R1.start_date BETWEEN R2.start_date AND R2.end_date    /* 条件（1）：自己的入住日期在他人的住宿期间内 */
               OR R1.end_date  BETWEEN R2.start_date AND R2.end_date));  /* 条件（2）：自己的离店日期在他人的住宿期间
 ```
+
+### 用SQL进行集合运算
+
+- SQL能操作具有重复行的集合，通过ALL选项来支持
+- 集合运算符有优先级， INTERSECT在UNION和EXCEPT前
+- 除法运算没有标准定义
+
+#### 检查集合相等性
+```
+/* 比较表和表：基础篇 */
+SELECT COUNT(*) AS row_cnt
+  FROM ( SELECT *
+           FROM tbl_A
+         UNION
+         SELECT *
+           FROM tbl_B ) TMP;
+```
+>如果两个集合相等，则它们的并集也是相等的。——幂等性
+>union具有幂等性，union all不具有幂等性
+
+```
+/* 比较表和表：进阶篇（在Oracle中无法运行） */
+SELECT DISTINCT CASE WHEN COUNT(*) = 0
+                     THEN '相等'
+                     ELSE '不相等' END AS result
+  FROM ((SELECT * FROM  tbl_A
+         UNION
+         SELECT * FROM  tbl_B)
+         EXCEPT
+        (SELECT * FROM  tbl_A
+         INTERSECT
+         SELECT * FROM  tbl_B)) TMP;
+```
+>如果两个集合相等，则 A UNION B = A = B,A INTERSECT B = A =B,(A UNION B) EXCEPT (A INTERSECT B) 为空集
+
+#### 用差集实现关系除法运算
+- 嵌套使用NOT EXISTS
+- 使用HAVING子句转换为一对一关系
+- 把除法变成乘法
+
+```
+/* 用求差集的方法进行关系除法运算（有余数） */
+SELECT DISTINCT emp
+  FROM EmpSkills ES1
+ WHERE NOT EXISTS
+        (SELECT skill
+           FROM Skills
+         EXCEPT
+         SELECT skill
+           FROM EmpSkills ES2
+          WHERE ES1.emp = ES2.emp);
+```
+
+#### 寻找相同的子集
+```
+/* 寻找相等的子集 */
+SELECT SP1.sup, SP2.sup
+  FROM SupParts SP1, SupParts SP2
+ WHERE SP1.sup < SP2.sup              /* 生成供应商的全部组合 */
+   AND SP1.part = SP2.part            /* 条件1：经营同种类型的零件 */
+GROUP BY SP1.sup, SP2.sup
+HAVING COUNT(*) = (SELECT COUNT(*)    /* 条件2：经营的零件种类数相同 */
+                     FROM SupParts SP3
+                    WHERE SP3.sup = SP1.sup)
+   AND COUNT(*) = (SELECT COUNT(*)
+                     FROM SupParts SP4
+                    WHERE SP4.sup = SP2.sup);
+```
+
+#### 用于删除重复行的高效SQL
+```
+-- 删除重复行：使用关联子查询
+DELETE FROM Products
+ WHERE rowid < (SELECT MAX(p2.rowid)
+                FROM Products p2
+                WHERE Products.name = p2.name
+                AND Products.price = p2.price);
+```
+```
+/* 用于删除重复行的高效SQL语句（1）：通过EXCEPT求补集 */
+DELETE FROM Products
+ WHERE rowid IN ( SELECT rowid
+                    FROM Products   --全部rowid
+                  EXCEPT            --减去
+                  SELECT MAX(rowid) --要留下的rowid
+                    FROM Products
+                   GROUP BY name, price);
+
+/* 删除重复行的高效SQL语句（2）：通过NOT IN求补集 */
+DELETE FROM Products
+ WHERE rowid NOT IN ( SELECT MAX(rowid)
+                        FROM Products
+                       GROUP BY name, price);
+
+```
+
+### EXISTS谓词的用法
+
+>用一句话来说，谓词就是函数。不过是一种特殊的函数，返回的值是真值，即true，false和unknow。
+
+#### 查询表中“不”存在的数据
+```
+/* 用于求出缺席者的SQL语句（1）：存在量化的应用 */
+SELECT DISTINCT M1.meeting, M2.person
+  FROM Meetings M1 CROSS JOIN Meetings M2
+ WHERE NOT EXISTS
+        (SELECT *
+           FROM Meetings M3
+          WHERE M1.meeting = M3.meeting
+            AND M2.person = M3.person);
+
+/* 用于求出缺席者的SQL语句（2）：使用差集运算 */
+SELECT M1.meeting, M2.person
+  FROM Meetings M1, Meetings M2
+EXCEPT
+SELECT meeting, person
+  FROM Meetings;
+```
+>NOT EXISTS具备了差集运算的功能
+
+#### “肯定”和“双重否定”之间的转换
+
+```
+/* 全称量化（1）：习惯“肯定<＝>双重否定”之间的转换 */
+SELECT DISTINCT student_id
+  FROM TestScores TS1
+ WHERE NOT EXISTS  /* 不存在满足以下条件的行 */
+        (SELECT *
+           FROM TestScores TS2
+          WHERE TS2.student_id = TS1.student_id
+            AND TS2.score < 50);   /* 分数不满50分的科目 */
+
+/* 全称量化（1）：习惯“肯定<＝>双重否定”之间的转换 */
+SELECT student_id
+  FROM TestScores TS1
+ WHERE subject IN ('数学', '语文')
+   AND NOT EXISTS
+        (SELECT *
+           FROM TestScores TS2
+          WHERE TS2.student_id = TS1.student_id
+            AND 1 = CASE WHEN subject = '数学' AND score < 80 THEN 1
+                         WHEN subject = '语文' AND score < 50 THEN 1
+                         ELSE 0 END)
+ GROUP BY student_id
+HAVING COUNT(*) = 2; /* 必须两门科目都有分数 */
+```
+
+#### 查询全是1的行
+```
+/* “列方向”的全称量化：不优雅的解答 */
+SELECT *
+  FROM ArrayTbl
+ WHERE col1 = 1
+   AND col2 = 1
+   AND col3 = 1
+   AND col4 = 1
+   AND col5 = 1
+   AND col6 = 1
+   AND col7 = 1
+   AND col8 = 1
+   AND col9 = 1
+   AND col10 = 1;
+
+/* “列方向”的全称量化：优雅的解答 */
+SELECT *
+  FROM ArrayTbl
+ WHERE 1 = ALL (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10);
+```
+
+```
+/* “列方向”的存在量化（1） */
+SELECT *
+  FROM ArrayTbl
+ WHERE 9 = ANY (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10);
+
+ /* “列方向”的存在量化（2） */
+ SELECT *
+   FROM ArrayTbl
+  WHERE 9 IN (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10);
+
+```
+```
+/* 查询全是NULL的行：错误的解法 */
+SELECT *
+  FROM ArrayTbl
+ WHERE NULL = ALL (col1, col2, col3, col4, col5, col6, col7, col8, col9, col10);
+
+/* 查询全是NULL的行：正确的解法 */
+SELECT *
+  FROM ArrayTbl
+ WHERE COALESCE(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10) IS NULL;
+ ```
+
+### 用SQL处理数列
+
+#### 生成连续编号
