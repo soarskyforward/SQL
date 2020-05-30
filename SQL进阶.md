@@ -770,7 +770,6 @@ SELECT seq
  WHERE seq BETWEEN 1 AND 12
    AND seq NOT IN (SELECT seq FROM SeqTbl);
 
-
 /* 动态地指定连续编号范围的SQL语句 */
 SELECT seq
   FROM Sequence
@@ -778,4 +777,187 @@ SELECT seq
                AND (SELECT MAX(seq) FROM SeqTbl)
 EXCEPT
 SELECT seq FROM SeqTbl;
+```
+
+#### 最多能坐多少人
+```
+/* 找出需要的空位（1）：不考虑座位的换排 */
+SELECT S1.seat   AS start_seat, '～' , S2.seat AS end_seat
+  FROM Seats S1, Seats S2
+ WHERE S2.seat = S1.seat + (:head_cnt -1)  /* 决定起点和终点 */
+   AND NOT EXISTS
+          (SELECT *
+             FROM Seats S3
+            WHERE S3.seat BETWEEN S1.seat AND S2.seat
+              AND S3.status <> '未预订' )
+ORDER BY start_seat;
+
+/* 找出需要的空位（2）：考虑座位的换排 */
+SELECT S1.seat   AS start_seat, '～' , S2.seat AS end_seat
+  FROM Seats2 S1, Seats2 S2
+ WHERE S2.seat = S1.seat + (:head_cnt -1)  --决定起点和终点
+   AND NOT EXISTS
+          (SELECT *
+             FROM Seats2 S3
+            WHERE S3.seat BETWEEN S1.seat AND S2.seat
+              AND (    S3.status <> '未预订'
+                    OR S3.row_id <> S1.row_id))
+ORDER BY start_seat;
+```
+```
+/* 第一阶段：生成存储了所有序列的视图 */
+CREATE VIEW Sequences (start_seat, end_seat, seat_cnt) AS
+SELECT S1.seat  AS start_seat,
+       S2.seat  AS end_seat,
+       S2.seat - S1.seat + 1 AS seat_cnt
+  FROM Seats3 S1, Seats3 S2
+ WHERE S1.seat <= S2.seat  /* 第一步：生成起点和终点的组合 */
+   AND NOT EXISTS   /* 第二步：描述序列内所有点需要满足的条件 */
+       (SELECT *
+          FROM Seats3 S3
+         WHERE (     S3.seat BETWEEN S1.seat AND S2.seat
+                 AND S3.status <> '未预订')                         /* 条件1的否定 */
+            OR  (S3.seat = S2.seat + 1 AND S3.status = '未预订' )    /* 条件2的否定 */
+            OR  (S3.seat = S1.seat - 1 AND S3.status = '未预订' ));  /* 条件3的否定 */
+
+
+/* 第二阶段：求最长的序列 */
+SELECT start_seat, '～', end_seat, seat_cnt
+  FROM Sequences
+ WHERE seat_cnt = (SELECT MAX(seat_cnt) FROM Sequences);
+```
+
+### HAVING子句再谈
+
+#### 查询可以出勤的队伍
+
+```
+/* 用谓词表达全称量化命题 */
+SELECT team_id, member
+  FROM Teams T1
+ WHERE NOT EXISTS
+        (SELECT *
+           FROM Teams T2
+          WHERE T1.team_id = T2.team_id
+            AND status <> '待命' );
+```
+```
+/* 用集合表达全称量化命题（1） */
+SELECT team_id
+  FROM Teams
+ GROUP BY team_id
+HAVING COUNT(*) = SUM(CASE WHEN status = '待命'
+                           THEN 1
+                           ELSE 0 END);
+
+/* 用集合表达全称量化命题（2） */
+SELECT team_id
+  FROM Teams
+ GROUP BY team_id
+HAVING MAX(status) = '待命'
+   AND MIN(status) = '待命';                         
+```
+>集合中最大值等于最小值，则这个集合只有一个值
+
+#### 单重集合和多重集合
+
+```
+/* 选中材料存在重复的生产地 */
+SELECT center
+  FROM Materials
+ GROUP BY center
+HAVING COUNT(material) <> COUNT(DISTINCT material);
+
+/* 列表显示是否存在重复 */
+SELECT center,
+       CASE WHEN COUNT(material) <> COUNT(DISTINCT material)
+            THEN '存在重复'
+            ELSE '不存在重复' END AS status
+  FROM Materials
+ GROUP BY center;
+```
+```
+/* 存在重复的集合：使用EXISTS */
+SELECT center, material
+  FROM Materials M1
+ WHERE EXISTS
+       (SELECT *
+          FROM Materials M2
+         WHERE M1.center = M2.center
+           AND M1.receive_date <> M2.receive_date
+           AND M1.material = M2.material);
+```
+
+#### 寻找缺失的编号：升级版
+```
+--前提条件：数列起始值为1
+SELECT '存在缺失的编号' AS gap
+FROM SeqTbl
+HAVING COUNT(*) <> MAX(seq);
+
+/* 如果有查询结果，说明存在缺失的编号：只调查数列的连续性 */
+SELECT '存在缺失的编号' AS gap
+  FROM SeqTbl
+HAVING COUNT(*) <> MAX(seq) - MIN(seq) + 1;
+```
+```
+/* 查找最小的缺失编号：表中没有1时返回1 */
+SELECT CASE WHEN MIN(seq) > 1          /* 最小值不是1时→返回1 */
+            THEN 1
+            ELSE (SELECT MIN(seq +1)  /* 最小值是1时→返回最小的缺失编号 */
+                    FROM SeqTbl S1
+                   WHERE NOT EXISTS
+                        (SELECT *
+                           FROM SeqTbl S2
+                          WHERE S2.seq = S1.seq + 1))
+             END AS min_gap
+  FROM SeqTbl;
+```
+
+#### 为集合设置详细的条件
+
+```
+/* 75%以上的学生分数都在80分以上的班级 */
+SELECT class
+  FROM TestResults
+GROUP BY class
+HAVING COUNT(*) * 0.75
+         <= SUM(CASE WHEN score >= 80
+                     THEN 1
+                     ELSE 0 END) ;
+```
+```
+/* 分数在50分以上的男生的人数比分数在50分以上的女生的人数多的班级 */
+SELECT class
+  FROM TestResults
+GROUP BY class
+HAVING SUM(CASE WHEN score >= 50 AND sex = '男'
+                THEN 1
+                ELSE 0 END)
+       > SUM(CASE WHEN score >= 50 AND sex = '女'
+                  THEN 1
+                  ELSE 0 END) ;
+```
+```
+/* 分数在50分以上的男生的人数比分数在50分以上的女生的人数多的班级 */
+SELECT class
+  FROM TestResults
+GROUP BY class
+HAVING SUM(CASE WHEN score >= 50 AND sex = '男'
+                THEN 1
+                ELSE 0 END)
+       > SUM(CASE WHEN score >= 50 AND sex = '女'
+                  THEN 1
+                  ELSE 0 END) ;
+
+/* 比较男生和女生平均分的SQL语句（2）：对空集求平均值后返回NULL */
+SELECT class
+  FROM TestResults
+ GROUP BY class
+HAVING AVG(CASE WHEN sex = '男'
+                THEN score
+                ELSE NULL END)
+     < AVG(CASE WHEN sex = '女'
+                THEN score
+                ELSE NULL END);
 ```
