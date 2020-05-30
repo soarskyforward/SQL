@@ -729,3 +729,53 @@ SELECT *
 ### 用SQL处理数列
 
 #### 生成连续编号
+```
+/* 求连续编号（1）：求0到99的数 */
+SELECT D1.digit + (D2.digit * 10)  AS seq
+  FROM Digits D1, Digits D2
+ORDER BY seq;
+
+/* 求连续编号（2）：求1到520的数 */
+SELECT D1.digit + (D2.digit * 10) + (D3.digit * 100) AS seq
+  FROM Digits D1, Digits D2, Digits D3
+ WHERE D1.digit + (D2.digit * 10) + (D3.digit * 100) BETWEEN 1 AND 520
+ORDER BY seq;
+```
+
+```
+/* 生成序列视图（包含0到999） */
+CREATE VIEW Sequence (seq)
+AS SELECT D1.digit + (D2.digit * 10) + (D3.digit * 100)
+     FROM Digits D1, Digits D2, Digits
+
+/* 从序列视图中获取1到100 */
+SELECT seq
+  FROM Sequence
+ WHERE seq BETWEEN 1 AND 100
+ORDER BY seq;
+```
+
+#### 求全部的缺失编号
+```
+/* 求所有缺失编号：EXCEPT版 */
+SELECT seq
+  FROM Sequence
+ WHERE seq BETWEEN 1 AND 12
+EXCEPT
+SELECT seq FROM SeqTbl;
+
+/* 求所有缺失编号：NOT IN版 */
+SELECT seq
+  FROM Sequence
+ WHERE seq BETWEEN 1 AND 12
+   AND seq NOT IN (SELECT seq FROM SeqTbl);
+
+
+/* 动态地指定连续编号范围的SQL语句 */
+SELECT seq
+  FROM Sequence
+ WHERE seq BETWEEN (SELECT MIN(seq) FROM SeqTbl)
+               AND (SELECT MAX(seq) FROM SeqTbl)
+EXCEPT
+SELECT seq FROM SeqTbl;
+```
