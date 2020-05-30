@@ -307,3 +307,229 @@ GROUP BY SI.shop
   HAVING COUNT(SI.item) = (SELECT COUNT(item) FROM Items)   /* 条件1 */
      AND COUNT(I.item)  = (SELECT COUNT(item) FROM Items);  /* 条件2 */
 ```
+
+## 外连接的用法
+
+#### 作为乘法运算的连接
+```
+/* 解答（1）：通过在连接前聚合来创建一对一的关系 */
+SELECT I.items_no, SH.total_qty
+FROM items I LEFT OUTER JOIN
+  (SELECT item_no, SUM(quantity) AS total_qty
+    FROM SalesHistory
+    GROUP BY item_no) SH
+  ON I.item_no = SH.item_no;
+```
+```
+/* 解答(2)：先进行一对多的连接再聚合 */
+SELECT I.item_no, SUM(SH.quantity) AS total_qty
+  FROM Items I LEFT OUTER JOIN SalesHistory SH
+    ON I.item_no = SH.item_no /* 一对多的连接 */
+ GROUP BY I.item_no;
+```
+>一对一或一对多关系的两个集合，在连接后行数不会增加，结果不变
+
+#### 全外连接
+
+- LEFT OUT JOIN 左外连接
+- RIGHT OUT JOIN 右外连接
+- FULL OUT JOIN 全外连接
+
+```
+/* 全外连接保留全部信息 */
+SELECT COALESCE(A.id, B.id) AS id,
+       A.name AS A_name,
+       B.name AS B_name
+FROM Class_A  A  FULL OUTER JOIN Class_B  B
+  ON A.id = B.id;
+```
+
+>内连接相当于求集合的积（intersect，交集）， 全外连接相当于求集合的和（union，并集）
+
+#### 用外连接进行集合运算
+
+```
+/* 用外连接求差集：A－B */
+SELECT A.id AS id,  A.name AS A_name
+  FROM Class_A  A LEFT OUTER JOIN Class_B B
+    ON A.id = B.id
+ WHERE B.name IS NULL;
+```
+```
+/* 用外连接求差集：B－A */
+SELECT B.id AS id, B.name AS B_name
+  FROM Class_A  A  RIGHT OUTER JOIN Class_B B
+    ON A.id = B.id
+ WHERE A.name IS NULL;
+```
+```
+/* 用全外连接求异或集 */
+SELECT COALESCE(A.id, B.id) AS id,
+       COALESCE(A.name , B.name ) AS name
+  FROM Class_A  A  FULL OUTER JOIN Class_B  B
+    ON A.id = B.id
+ WHERE A.name IS NULL
+    OR B.name IS NULL;
+```
+```
+/* 用外连接进行关系除法运算：差集的应用 */
+SELECT DISTINCT shop
+  FROM ShopItems SI1
+WHERE NOT EXISTS
+      (SELECT I.item
+         FROM Items I LEFT OUTER JOIN ShopItems SI2
+           ON SI1.shop = SI2.shop
+          AND I.item   = SI2.item
+        WHERE SI2.item IS NULL) ;
+```
+
+### 用关联子查询比较行与行
+
+#### 增加，减少，维持现状
+```
+/* 求与上一年营业额一样的年份（1）：使用关联子查询 */
+SELECT year,sale
+  FROM Sales S1
+ WHERE sale = (SELECT sale
+                 FROM Sales S2
+                WHERE S2.year = S1.year - 1)
+ ORDER BY year;
+
+ /* 求与上一年营业额一样的年份（2）：使用自连接 */
+ SELECT S1.year, S1.sale
+   FROM Sales S1,
+        Sales S2
+  WHERE S2.sale = S1.sale
+    AND S2.year = S1.year - 1
+  ORDER BY year;
+```
+
+#### 用列表展示比较结果
+```
+/* 求出是增长了还是减少了，抑或是维持现状（1）：使用关联子查询 */
+SELECT S1.year, S1.sale,
+       CASE WHEN sale =
+             (SELECT sale
+                FROM Sales S2
+               WHERE S2.year = S1.year - 1) THEN '→' /* 持平 */
+            WHEN sale >
+             (SELECT sale
+                FROM Sales S2
+               WHERE S2.year = S1.year - 1) THEN '↑' /* 增长 */
+            WHEN sale <
+             (SELECT sale
+                FROM Sales S2
+               WHERE S2.year = S1.year - 1) THEN '↓' /* 减少 */
+       ELSE '—' END AS var
+  FROM Sales S1
+ ORDER BY year;
+
+ /* 求出是增长了还是减少了，抑或是维持现状（2）：使用自连接查询 */
+ SELECT S1.year, S1.sale,
+        CASE WHEN S1.sale = S2.sale THEN '→'
+             WHEN S1.sale > S2.sale THEN '↑'
+             WHEN S1.sale < S2.sale THEN '↓'
+        ELSE '—' END AS var
+   FROM Sales S1, Sales S2
+  WHERE S2.year = S1.year-1
+  ORDER BY year;
+```
+
+#### 时间轴有间断时
+```
+/* 查询与过去最临近的年份营业额相同的年份 */
+SELECT year, sale
+  FROM Sales2 S1
+ WHERE sale =
+   (SELECT sale
+      FROM Sales2 S2
+     WHERE S2.year =
+       (SELECT MAX(year)            /* 条件2：在满足条件1的年份中，年份最早的一个 */
+          FROM Sales2 S3
+         WHERE S1.year > S3.year))  /* 条件1：与该年份相比是过去的年份 */
+ ORDER BY year;
+
+ /* 查询与过去最临近的年份营业额相同的年份：同时使用自连接 */
+ SELECT S1.year AS year,
+        S1.sale AS sale
+   FROM Sales2 S1, Sales2 S2
+  WHERE S1.sale = S2.sale
+    AND S2.year = (SELECT MAX(year)
+                     FROM Sales2 S3
+                    WHERE S1.year > S3.year)
+  ORDER BY year;
+```
+
+```
+/* 求每一年与过去最临近的年份之间的营业额之差（1）：结果里不包含最早的年份 */
+SELECT S2.year AS pre_year,
+       S1.year AS now_year,
+       S2.sale AS pre_sale,
+       S1.sale AS now_sale,
+       S1.sale - S2.sale  AS diff
+ FROM Sales2 S1, Sales2 S2
+ WHERE S2.year = (SELECT MAX(year)
+                    FROM Sales2 S3
+                   WHERE S1.year > S3.year)
+ ORDER BY now_year;
+
+ /* 求每一年与过去最临近的年份之间的营业额之差（2）：使用自外连接。结果里包含最早的年份 */
+ SELECT S2.year AS pre_year,
+        S1.year AS now_year,
+        S2.sale AS pre_sale,
+        S1.sale AS now_sale,
+        S1.sale - S2.sale AS diff
+  FROM Sales2 S1 LEFT OUTER JOIN Sales2 S2
+    ON S2.year = (SELECT MAX(year)
+                    FROM Sales2 S3
+                   WHERE S1.year > S3.year)
+  ORDER BY now_year;
+ ```
+
+#### 移动累计值和移动平均值
+
+```
+/* 求累计值：使用窗口函数 */
+SELECT prc_date, prc_amt,
+       SUM(prc_amt) OVER (ORDER BY prc_date) AS onhand_amt
+  FROM Accounts;
+
+  /* 求累计值：使用冯·诺依曼型递归集合 */
+  SELECT prc_date, A1.prc_amt,
+        (SELECT SUM(prc_amt)
+           FROM Accounts A2
+          WHERE A1.prc_date >= A2.prc_date ) AS onhand_amt
+    FROM Accounts A1
+   ORDER BY prc_date;
+```
+```
+/* 求移动累计值（1）：使用窗口函数 */
+SELECT prc_date, prc_amt,
+       SUM(prc_amt) OVER (ORDER BY prc_date
+                           ROWS 2 PRECEDING) AS onhand_amt
+  FROM Accounts;
+
+/* 求移动累计值（2）：不满3行的时间区间也输出 */
+  SELECT prc_date, A1.prc_amt,
+        (SELECT SUM(prc_amt)
+           FROM Accounts A2
+          WHERE A1.prc_date >= A2.prc_date
+            AND (SELECT COUNT(*)
+                   FROM Accounts A3
+                  WHERE A3.prc_date
+                    BETWEEN A2.prc_date AND A1.prc_date  ) <= 3 ) AS mvg_sum
+    FROM Accounts A1
+   ORDER BY prc_date;
+```
+
+```
+/* 求重叠的住宿期间 */
+SELECT reserver, start_date, end_date
+  FROM Reservations R1
+ WHERE EXISTS
+       (SELECT *
+          FROM Reservations R2
+         WHERE R1.reserver <> R2.reserver  /* 与自己以外的客人进行比较 */
+           AND ( R1.start_date BETWEEN R2.start_date AND R2.end_date    /* 条件（1）：自己的入住日期在他人的住宿期间内 */
+              OR R1.end_date  BETWEEN R2.start_date AND R2.end_date));  /* 条件（2）：自己的离店日期在他人的住宿期间
+```
